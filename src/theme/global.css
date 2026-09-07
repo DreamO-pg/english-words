@@ -1,0 +1,96 @@
+/* Глобальная база. Всё остальное — инлайновые стили компонентов,
+   чтобы токены жили в одном месте и не расползались по css. */
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--c-bg);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.4;
+  overscroll-behavior: none;
+  /* Свой статус-бар не рисуем: телеграм даёт свою шапку. */
+}
+
+body {
+  /* Высоту берём из viewportStableHeight, не из 100vh. */
+  height: var(--app-height, 100dvh);
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: var(--c-accent-bg);
+}
+
+/* Единственные движения в приложении. */
+@keyframes card-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.card-in {
+  animation: card-in 220ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.step-in {
+  animation: step-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-in,
+  .step-in {
+    animation: none;
+  }
+}
+
+/* Скроллим только содержимое экрана, страница неподвижна. */
+.scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
