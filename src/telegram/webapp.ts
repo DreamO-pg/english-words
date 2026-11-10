@@ -124,93 +124,141 @@ export const haptic = {
 
 const LS_PREFIX = 'ew:';
 
+/** Лимиты CloudStorage: ключ 1–128 символов из A-Z a-z 0-9 _ -, значение до 4096. */
+export const MAX_KEY = 128;
+export const MAX_VALUE = 4096;
+const KEY_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** Ответ не пришёл за это время — считаем сбоем, а не пустотой. */
+const TIMEOUT_MS = 8000;
+const ATTEMPTS = 3;
+
+/**
+ * Любой сбой хранилища — ошибка, а не «пусто». Пустой ответ и упавший запрос
+ * должны различаться: иначе после сбоя чтения приложение решит, что прогресса
+ * нет, и следующее сохранение перезапишет облако.
+ */
+export class StorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StorageError';
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Колбэк CloudStorage → промис с таймаутом. */
+function cloudCall<T>(fn: (done: (err: string | null, value: T) => void) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new StorageError('timeout')), TIMEOUT_MS);
+    try {
+      fn((err, value) => {
+        clearTimeout(timer);
+        if (err) reject(new StorageError(String(err)));
+        else resolve(value);
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      reject(new StorageError(e instanceof Error ? e.message : String(e)));
+    }
+  });
+}
+
+/** Сеть в телеграме бывает плохой — пара повторов с паузой. */
+async function withRetry<T>(op: () => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < ATTEMPTS; i++) {
+    try {
+      return await op();
+    } catch (e) {
+      last = e;
+      if (i < ATTEMPTS - 1) await sleep(300 * 2 ** i);
+    }
+  }
+  throw last instanceof StorageError ? last : new StorageError(String(last));
+}
+
+/** localStorage тоже может бросить: приватный режим, запрет хранилища. */
+function local<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    throw new StorageError(e instanceof Error ? e.message : String(e));
+  }
+}
+
+function assertWritable(key: string, value?: string) {
+  if (!KEY_RE.test(key)) throw new StorageError(`недопустимый ключ: ${key.slice(0, 40)}`);
+  if (value !== undefined && value.length > MAX_VALUE) {
+    throw new StorageError(`значение ключа ${key} длиннее ${MAX_VALUE} символов`);
+  }
+}
+
 /**
  * CloudStorage: до 1024 ключей, значение до 4096 символов.
  * В браузере — localStorage с тем же интерфейсом.
+ * Все методы при сбое бросают StorageError.
  */
 export const storage = {
   async get(key: string): Promise<string | null> {
-    if (!raw) return localStorage.getItem(LS_PREFIX + key);
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.getItem(key, (err, value) => {
-          resolve(err ? null : value ?? null);
-        });
-      } catch {
-        resolve(null);
-      }
-    });
+    if (!raw) return local(() => localStorage.getItem(LS_PREFIX + key));
+    return withRetry(() =>
+      cloudCall<string | null>((done) => raw.CloudStorage.getItem(key, done)),
+    ).then((v) => (v === '' || v === undefined ? null : v));
   },
 
   async getMany(keys: string[]): Promise<Record<string, string>> {
     if (keys.length === 0) return {};
     if (!raw) {
-      const out: Record<string, string> = {};
-      for (const k of keys) {
-        const v = localStorage.getItem(LS_PREFIX + k);
-        if (v !== null) out[k] = v;
-      }
-      return out;
+      return local(() => {
+        const out: Record<string, string> = {};
+        for (const k of keys) {
+          const v = localStorage.getItem(LS_PREFIX + k);
+          if (v !== null) out[k] = v;
+        }
+        return out;
+      });
     }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.getItems(keys, (err, values) => {
-          resolve(err || !values ? {} : values);
-        });
-      } catch {
-        resolve({});
-      }
-    });
+    const values = await withRetry(() =>
+      cloudCall<Record<string, string> | null>((done) => raw.CloudStorage.getItems(keys, done)),
+    );
+    if (!values) throw new StorageError('getItems вернул пустой ответ');
+    const out: Record<string, string> = {};
+    for (const k of keys) if (values[k]) out[k] = values[k];
+    return out;
   },
 
-  async set(key: string, value: string): Promise<boolean> {
-    if (value.length > 4096) {
-      console.warn(`[storage] значение ключа ${key} длиннее 4096 символов`);
-    }
-    if (!raw) {
-      try {
-        localStorage.setItem(LS_PREFIX + key, value);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.setItem(key, value, (err, ok) => resolve(!err && ok));
-      } catch {
-        resolve(false);
-      }
-    });
+  async set(key: string, value: string): Promise<void> {
+    assertWritable(key, value);
+    if (!raw) return local(() => localStorage.setItem(LS_PREFIX + key, value));
+    const ok = await withRetry(() =>
+      cloudCall<boolean>((done) => raw.CloudStorage.setItem(key, value, done)),
+    );
+    if (!ok) throw new StorageError(`setItem(${key}) не подтверждён`);
   },
 
-  async remove(key: string): Promise<boolean> {
-    if (!raw) {
-      localStorage.removeItem(LS_PREFIX + key);
-      return true;
-    }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.removeItem(key, (err, ok) => resolve(!err && ok));
-      } catch {
-        resolve(false);
-      }
-    });
+  async remove(key: string): Promise<void> {
+    assertWritable(key);
+    if (!raw) return local(() => localStorage.removeItem(LS_PREFIX + key));
+    const ok = await withRetry(() =>
+      cloudCall<boolean>((done) => raw.CloudStorage.removeItem(key, done)),
+    );
+    if (!ok) throw new StorageError(`removeItem(${key}) не подтверждён`);
   },
 
   async keys(): Promise<string[]> {
     if (!raw) {
-      return Object.keys(localStorage)
-        .filter((k) => k.startsWith(LS_PREFIX))
-        .map((k) => k.slice(LS_PREFIX.length));
+      return local(() =>
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith(LS_PREFIX))
+          .map((k) => k.slice(LS_PREFIX.length)),
+      );
     }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.getKeys((err, keys) => resolve(err || !keys ? [] : keys));
-      } catch {
-        resolve([]);
-      }
-    });
+    const keys = await withRetry(() =>
+      cloudCall<string[] | null>((done) => raw.CloudStorage.getKeys(done)),
+    );
+    if (!keys) throw new StorageError('getKeys вернул пустой ответ');
+    return keys;
   },
 };
 

@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check:words": "esbuild src/data/words.ts --bundle --format=esm --outfile=.cache/words.mjs --log-level=error && node scripts/check-words.mjs",
-    "check:engine": "esbuild scripts/engine-entry.ts --bundle --format=esm --outfile=.cache/engine.mjs --log-level=error && node scripts/check-engine.mjs"
+    "check:engine": "esbuild scripts/engine-entry.ts --bundle --format=esm --outfile=.cache/engine.mjs --log-level=error && node scripts/check-engine.mjs",
+    "check:storage": "esbuild scripts/storage-entry.ts --bundle --format=esm --outfile=.cache/storage.mjs --log-level=error && node scripts/check-storage.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

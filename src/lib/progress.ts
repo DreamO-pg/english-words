@@ -72,11 +72,14 @@ export function serializeLevelProgress(progress: LevelProgress): string[] {
   return chunks;
 }
 
-export async function loadProgress(): Promise<Progress> {
-  const keys = (await storage.keys()).filter((k) => levelOfKey(k) !== null);
-  if (keys.length === 0) return {};
-  const values = await storage.getMany(keys);
+/** Номер шарда по ключу: progress_b1 → 0, progress_b1_2 → 2. */
+function shardIndex(level: Level, key: string): number {
+  const suffix = key.slice(baseKey(level).length);
+  return suffix === '' ? 0 : Number(suffix.slice(1));
+}
 
+/** Разобрать уже прочитанные значения ключей в прогресс по уровням. */
+function collect(keys: string[], values: Record<string, string>): Progress {
   const progress: Progress = {};
   for (const key of keys) {
     const level = levelOfKey(key);
@@ -88,25 +91,58 @@ export async function loadProgress(): Promise<Progress> {
 }
 
 /**
- * Пишем только те уровни, которые тронул урок, и только в конце урока.
- * Хвостовые шарды, ставшие ненужными, чистим — иначе при удалении слов
- * останутся висеть старые записи.
+ * Сбой чтения не маскируется под «прогресса нет»: StorageError уходит
+ * наверх, и приложение не даёт начать урок, пока прогресс не прочитан.
  */
-export async function saveLevelProgress(level: Level, progress: LevelProgress): Promise<void> {
-  const chunks = serializeLevelProgress(progress);
-  await Promise.all(chunks.map((value, i) => storage.set(shardKey(level, i), value)));
-
-  const stale = (await storage.keys()).filter((key) => {
-    if (levelOfKey(key) !== level) return false;
-    const suffix = key.slice(baseKey(level).length);
-    const index = suffix === '' ? 0 : Number(suffix.slice(1));
-    return Number.isFinite(index) && index >= chunks.length;
-  });
-  await Promise.all(stale.map((key) => storage.remove(key)));
+export async function loadProgress(): Promise<Progress> {
+  const keys = (await storage.keys()).filter((k) => levelOfKey(k) !== null);
+  if (keys.length === 0) return {};
+  return collect(keys, await storage.getMany(keys));
 }
 
-export async function saveProgress(progress: Progress, levels: Level[]): Promise<void> {
-  for (const level of levels) {
-    await saveLevelProgress(level, progress[level] ?? {});
+/**
+ * Слить две версии прогресса уровня: по каждому слову побеждает запись
+ * с более поздним днём показа, при равенстве — `preferred`.
+ * `removed` — слова, которых больше нет (удалённые свои слова).
+ */
+export function mergeLevelProgress(
+  other: LevelProgress,
+  preferred: LevelProgress,
+  removed: readonly string[] = [],
+): LevelProgress {
+  const out: LevelProgress = { ...other };
+  for (const [id, record] of Object.entries(preferred)) {
+    const theirs = out[id];
+    if (!theirs || record.lastDay >= theirs.lastDay) out[id] = record;
   }
+  for (const id of removed) delete out[id];
+  return out;
+}
+
+/**
+ * Записать уровень, не затирая чужие изменения: сначала читаем, что сейчас
+ * в облаке (например, урок с другого устройства), сливаем со своим и только
+ * потом пишем. Хвостовые шарды удаляем лишь после того, как все новые
+ * записались. Возвращает итоговый (слитый) прогресс уровня.
+ */
+export async function saveLevelProgress(
+  level: Level,
+  local: LevelProgress,
+  removed: readonly string[] = [],
+): Promise<LevelProgress> {
+  const ownKeys = (await storage.keys()).filter((k) => levelOfKey(k) === level);
+  const remote = ownKeys.length ? collect(ownKeys, await storage.getMany(ownKeys))[level] ?? {} : {};
+  const merged = mergeLevelProgress(remote, local, removed);
+
+  const chunks = serializeLevelProgress(merged);
+  for (let i = 0; i < chunks.length; i++) {
+    await storage.set(shardKey(level, i), chunks[i]);
+  }
+
+  const stale = ownKeys.filter((key) => {
+    const index = shardIndex(level, key);
+    return Number.isFinite(index) && index >= chunks.length;
+  });
+  for (const key of stale) await storage.remove(key);
+  return merged;
 }

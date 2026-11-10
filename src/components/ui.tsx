@@ -235,3 +235,41 @@ export function Placeholder({ title, note }: { title: string; note: string }) {
     </div>
   );
 }
+
+/** Плашка о сбое: текст и одно действие. */
+export function Banner({
+  text,
+  action,
+  onAction,
+}: {
+  text: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 24px',
+        background: colors.badBg,
+        color: colors.ink,
+        fontSize: 13,
+        lineHeight: 1.35,
+      }}
+    >
+      <span style={{ flex: 1 }}>{text}</span>
+      <button
+        onClick={() => {
+          haptic.tap();
+          onAction();
+        }}
+        style={{ color: colors.bad, fontWeight: 600, fontSize: 14, padding: '4px 0' }}
+      >
+        {action}
+      </button>
+    </div>
+  );
+}
