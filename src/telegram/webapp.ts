@@ -29,6 +29,28 @@ function safe(fn: () => void) {
   }
 }
 
+/**
+ * Клиент поддерживает этот метод? На старых клиентах SDK на неподдержанный
+ * метод пишет в консоль ошибку или бросает — поэтому сначала спрашиваем версию.
+ */
+function since(version: string): boolean {
+  if (!raw) return false;
+  try {
+    return raw.isVersionAtLeast(version);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Минимальная версия, с которой приложение работает полноценно: 6.9 —
+ * это CloudStorage. Ниже прогресс сохранять некуда, и честнее сказать
+ * «обновите Telegram», чем молча терять уроки.
+ */
+export const MIN_VERSION = '6.9';
+export const isOutdatedClient = Boolean(raw) && !since(MIN_VERSION);
+export const clientVersion = raw?.version ?? '';
+
 // ─── старт ────────────────────────────────────────────────────────────────
 
 export function initWebApp() {
@@ -43,10 +65,13 @@ export function initWebApp() {
   safe(() => raw.ready());
   safe(() => raw.expand());
   // Иначе свайп по списку вариантов сворачивает окно.
-  safe(() => raw.disableVerticalSwipes?.());
+  if (since('7.7')) safe(() => raw.disableVerticalSwipes?.());
   // Тема фиксированно светлая, themeParams пользователя игнорируем.
-  safe(() => raw.setHeaderColor(colors.bg));
-  safe(() => raw.setBackgroundColor(colors.bg));
+  // Цвет шапки hex-строкой — с 6.9, раньше только ключи темы.
+  if (since('6.9')) safe(() => raw.setHeaderColor(colors.bg));
+  if (since('6.1')) safe(() => raw.setBackgroundColor(colors.bg));
+  // Нижняя полоса (Android, iOS) иначе остаётся цвета темы — тёмной в тёмной теме.
+  if (since('7.10')) safe(() => raw.setBottomBarColor?.(colors.bg));
 
   raw.onEvent('viewportChanged', applyHeight);
 }
@@ -86,6 +111,7 @@ export function setBackButton(handler: (() => void) | null): () => void {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }
+  if (!since('6.1')) return () => {};
   const back = raw.BackButton;
   if (!handler) {
     safe(() => back.hide());
@@ -105,20 +131,44 @@ export function setBackButton(handler: (() => void) | null): () => void {
 
 // ─── тактильный отклик ────────────────────────────────────────────────────
 
+const hapticOk = () => since('6.1');
+
 export const haptic = {
   success() {
-    safe(() => raw?.HapticFeedback.notificationOccurred('success'));
+    if (hapticOk()) safe(() => raw?.HapticFeedback.notificationOccurred('success'));
   },
   error() {
-    safe(() => raw?.HapticFeedback.notificationOccurred('error'));
+    if (hapticOk()) safe(() => raw?.HapticFeedback.notificationOccurred('error'));
   },
   select() {
-    safe(() => raw?.HapticFeedback.selectionChanged());
+    if (hapticOk()) safe(() => raw?.HapticFeedback.selectionChanged());
   },
   tap() {
-    safe(() => raw?.HapticFeedback.impactOccurred('light'));
+    if (hapticOk()) safe(() => raw?.HapticFeedback.impactOccurred('light'));
   },
 };
+
+// ─── подтверждения ────────────────────────────────────────────────────────
+
+/** Нативный диалог «ОК / Отмена»; в браузере и на старых клиентах — window.confirm. */
+export function confirmAction(message: string): Promise<boolean> {
+  if (raw && since('6.2')) {
+    return new Promise((resolve) => {
+      try {
+        raw.showConfirm(message, (ok) => resolve(Boolean(ok)));
+      } catch {
+        resolve(window.confirm(message));
+      }
+    });
+  }
+  return Promise.resolve(window.confirm(message));
+}
+
+/** Спрашивать ли «закрыть?» при сворачивании окна — включаем на время урока. */
+export function setClosingConfirmation(on: boolean) {
+  if (!raw || !since('6.2')) return;
+  safe(() => (on ? raw.enableClosingConfirmation() : raw.disableClosingConfirmation()));
+}
 
 // ─── хранилище ────────────────────────────────────────────────────────────
 
@@ -265,7 +315,7 @@ export const storage = {
 // ─── экран «домой» ────────────────────────────────────────────────────────
 
 export async function checkHomeScreen(): Promise<HomeScreenStatus> {
-  if (!raw?.checkHomeScreenStatus) return 'unsupported';
+  if (!raw?.checkHomeScreenStatus || !since('8.0')) return 'unsupported';
   return new Promise((resolve) => {
     try {
       raw.checkHomeScreenStatus!((status) => resolve(status));
@@ -277,5 +327,15 @@ export async function checkHomeScreen(): Promise<HomeScreenStatus> {
 }
 
 export function addToHomeScreen() {
-  safe(() => raw?.addToHomeScreen?.());
+  if (since('8.0')) safe(() => raw?.addToHomeScreen?.());
+}
+
+/**
+ * Приложение действительно добавили на экран (8.0). Нажатие «Добавить»
+ * само по себе ничего не значит: пользователь может отменить системный диалог.
+ */
+export function onHomeScreenAdded(cb: () => void): () => void {
+  if (!raw || !since('8.0')) return () => {};
+  safe(() => raw.onEvent('homeScreenAdded', cb));
+  return () => safe(() => raw.offEvent('homeScreenAdded', cb));
 }

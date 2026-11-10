@@ -6,6 +6,10 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+html {
+  color-scheme: light;
+}
+
 html,
 body {
   margin: 0;
@@ -39,6 +43,8 @@ button {
   margin: 0;
   cursor: pointer;
   text-align: left;
+  /* Масштаб жестом разрешён (доступность), а двойной тап по кнопке не зумит. */
+  touch-action: manipulation;
 }
 
 input,

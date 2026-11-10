@@ -5,6 +5,7 @@ import { ResultScreen } from './screens/ResultScreen';
 import { WordsScreen } from './screens/WordsScreen';
 import { AddWordScreen } from './screens/AddWordScreen';
 import { LoadScreen } from './screens/LoadScreen';
+import { UpdateScreen } from './screens/UpdateScreen';
 import { Banner } from './components/ui';
 import { DEFAULT_SETTINGS, loadSettings, type Settings } from './lib/settings';
 import { LEVELS, WORDS, type Level, type Word } from './data/words';
@@ -28,7 +29,15 @@ import {
   poolFor,
   type LessonState,
 } from './lib/lesson';
-import { addToHomeScreen, checkHomeScreen, setBackButton } from './telegram/webapp';
+import {
+  addToHomeScreen,
+  checkHomeScreen,
+  confirmAction,
+  isOutdatedClient,
+  onHomeScreenAdded,
+  setBackButton,
+  setClosingConfirmation,
+} from './telegram/webapp';
 import type { HomeScreenStatus } from './telegram/types';
 
 /** Через сколько повторить неудавшуюся запись в облако. */
@@ -96,8 +105,11 @@ export function App() {
   }, [sync]);
 
   useEffect(() => {
+    // На клиенте без CloudStorage читать нечего — там экран «обновите Telegram».
+    if (isOutdatedClient) return;
     void loadAll();
     checkHomeScreen().then(setHomeScreenStatus);
+    return onHomeScreenAdded(() => setHomeScreenStatus('added'));
   }, [loadAll]);
 
   // Вернулись в приложение — пробуем дослать несохранённое.
@@ -112,11 +124,28 @@ export function App() {
     };
   }, [sync]);
 
+  // Есть ли в уроке что терять: хотя бы один ответ уже дан.
+  const lessonInProgress = screen === 'lesson' && (lesson?.position ?? 0) > 0;
+
   // Своей кнопки «назад» нет — только нативная телеграмовская.
+  // Из начатого урока — только после подтверждения: ответы пишутся в конце урока.
   useEffect(() => {
     if (screen === 'home') return setBackButton(null);
-    return setBackButton(() => setScreen(screen === 'addWord' ? 'words' : 'home'));
-  }, [screen]);
+    return setBackButton(() => {
+      if (!lessonInProgress) {
+        setScreen(screen === 'addWord' ? 'words' : 'home');
+        return;
+      }
+      void confirmAction('Выйти из урока? Ответы этого урока не сохранятся.').then((ok) => {
+        if (ok) setScreen('home');
+      });
+    });
+  }, [screen, lessonInProgress]);
+
+  // Свернуть или закрыть окно посреди урока — тоже с вопросом.
+  useEffect(() => {
+    setClosingConfirmation(lessonInProgress);
+  }, [lessonInProgress]);
 
   /** Свои слова живут в словаре наравне с остальными. */
   const allWords = useMemo(() => [...WORDS, ...custom], [custom]);
@@ -231,6 +260,8 @@ export function App() {
   };
 
   const removeCustomWord = async (word: Word) => {
+    const ok = await confirmAction(`Удалить «${word.en}»? Прогресс по слову тоже удалится.`);
+    if (!ok) return;
     try {
       await deleteCustomWord(word.id);
     } catch {
@@ -265,10 +296,9 @@ export function App() {
       homeScreen={
         offerHomeScreen
           ? {
-              onAdd: () => {
-                addToHomeScreen();
-                patchSettings({ homeScreenHidden: true });
-              },
+              // Плашку убирает событие homeScreenAdded, а не само нажатие:
+              // системный диалог можно отменить.
+              onAdd: addToHomeScreen,
               onDismiss: () => patchSettings({ homeScreenHidden: true }),
             }
           : undefined
@@ -276,6 +306,7 @@ export function App() {
     />
   );
 
+  if (isOutdatedClient) return <UpdateScreen />;
   if (load !== 'ready') return <LoadScreen failed={load === 'error'} onRetry={loadAll} />;
 
   const banner = notice ? (
