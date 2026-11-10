@@ -7,7 +7,7 @@ import { AddWordScreen } from './screens/AddWordScreen';
 import { LoadScreen } from './screens/LoadScreen';
 import { Banner } from './components/ui';
 import { DEFAULT_SETTINGS, loadSettings, type Settings } from './lib/settings';
-import { WORDS, type Level, type Word } from './data/words';
+import { LEVELS, WORDS, type Level, type Word } from './data/words';
 import {
   deleteCustomWord,
   draftToWord,
@@ -23,8 +23,8 @@ import {
   answerCard,
   createLesson,
   isLessonOver,
+  lessonMistakes,
   pickLessonWords,
-  pickRepeatWords,
   poolFor,
   type LessonState,
 } from './lib/lesson';
@@ -121,9 +121,17 @@ export function App() {
   /** Свои слова живут в словаре наравне с остальными. */
   const allWords = useMemo(() => [...WORDS, ...custom], [custom]);
 
+  /** Уровни, в которых вообще есть слова — остальные на главной не показываем. */
+  const levels = useMemo(
+    () => LEVELS.filter((level) => allWords.some((w) => w.level === level)),
+    [allWords],
+  );
+  // В настройках мог остаться уровень, слов которого больше нет (удалили свои).
+  const level: Level = levels.includes(settings.level) ? settings.level : (levels[0] ?? 'B1');
+
   const pool = useMemo(
-    () => poolFor(allWords, settings.set, settings.level),
-    [allWords, settings.set, settings.level],
+    () => poolFor(allWords, settings.set, level),
+    [allWords, settings.set, level],
   );
 
   const summary = useMemo(() => summarize(pool, progress, stats), [pool, progress, stats]);
@@ -145,11 +153,8 @@ export function App() {
     setScreen('lesson');
   }, [pool, allWords, progress, settings.lessonSize]);
 
-  /** «Повторить ошибки» — только слова из box 1–2. */
-  const repeatWords = useMemo(
-    () => pickRepeatWords(pool, progress, settings.lessonSize),
-    [pool, progress, settings.lessonSize],
-  );
+  /** «Повторить ошибки» — ровно те слова, в которых ошибся в этом уроке. */
+  const repeatWords = useMemo(() => (lesson ? lessonMistakes(lesson) : []), [lesson]);
 
   const startRepeat = useCallback(() => {
     if (repeatWords.length === 0) return;
@@ -254,6 +259,9 @@ export function App() {
       onStart={startLesson}
       onOpenWords={() => setScreen('words')}
       summary={summary}
+      levels={levels}
+      level={level}
+      empty={pool.length === 0}
       homeScreen={
         offerHomeScreen
           ? {
@@ -297,7 +305,7 @@ export function App() {
       );
     if (screen === 'addWord')
       return (
-        <AddWordScreen level={settings.level} onSave={addCustomWord} onCancel={() => setScreen('words')} />
+        <AddWordScreen level={level} onSave={addCustomWord} onCancel={() => setScreen('words')} />
       );
     if (screen === 'words')
       return (

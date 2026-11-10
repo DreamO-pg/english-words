@@ -1,4 +1,4 @@
-import { POS_LABEL, type Level, type Pos, type Word } from '../data/words';
+import { LEVELS, POS_LABEL, type Level, type Pos, type Word } from '../data/words';
 import { MAX_VALUE, storage } from '../telegram/webapp';
 
 /**
@@ -18,7 +18,6 @@ export const LIMITS = { en: 60, ru: 120, example: 200 } as const;
 /** Ключ CloudStorage до 128 символов: `cw_` + id не длиннее этого. */
 const MAX_ID = 64;
 
-const LEVELS: readonly Level[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
 
 export type CustomDraft = {
   en: string;

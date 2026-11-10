@@ -7,9 +7,9 @@ import {
   isLessonOver,
   lessonMistakes,
   pickLessonWords,
-  pickRepeatWords,
   poolFor,
   applyAnswer,
+  dayOf,
   isDue,
   INTERVALS,
   parseLevelProgress,
@@ -58,6 +58,29 @@ console.log('\nдистракторы');
   ok(`${sameKind} дистракторов взяты того же уровня и части речи`, sameKind > 0);
 }
 
+console.log('\nни один неправильный вариант не является значением слова');
+{
+  const bad = new Set();
+  const norm = (x) => x.trim().toLowerCase().replace(/ё/g, 'е');
+  for (const word of WORDS) {
+    const pool = WORDS.filter((w) => w.level === word.level);
+    const meanings = new Set(word.ru.map(norm));
+    for (let i = 0; i < 30; i++) {
+      const card = buildCard(word, pool, WORDS);
+      card.options.forEach((o, j) => {
+        if (j !== card.correctIndex && meanings.has(norm(o))) bad.add(`${word.id} ← «${o}»`);
+      });
+    }
+  }
+  ok(`${WORDS.length} слов × 30 прогонов без «верных ошибок»`, bad.size === 0, [...bad].slice(0, 6).join('; '));
+  // те самые 16 слов из аудита (L-02)
+  const benefit = WORDS.find((w) => w.id === 'benefit');
+  const pool = WORDS.filter((w) => w.level === benefit.level);
+  let leak = false;
+  for (let i = 0; i < 200; i++) if (buildCard(benefit, pool, WORDS).options.includes('преимущество')) leak = true;
+  ok('benefit больше не предлагает «преимущество» как ошибку', !leak);
+}
+
 console.log('\nложные друзья');
 {
   const ff = WORDS.filter((w) => w.falseFriendRu);
@@ -78,7 +101,7 @@ console.log('\nложные друзья');
 
 console.log('\nЛейтнер');
 {
-  let p = applyAnswer(undefined, true);
+  let p = applyAnswer(undefined, true, 900);
   ok('новое слово, угаданное с первого раза, уходит в box 2', p.box === 2);
   ok('новое слово с ошибкой остаётся в box 1', applyAnswer(undefined, false).box === 1);
   for (let i = 0; i < 10; i++) p = applyAnswer(p, true, 1000 + i * 100);
@@ -91,6 +114,27 @@ console.log('\nЛейтнер');
     return !isDue(rec, 100 + days - 1) && isDue(rec, 100 + days);
   });
   ok(`интервалы ${INTERVALS.join('/')} срабатывают ровно в свой день`, intervalsOk);
+}
+
+console.log('\nЛейтнер: срок');
+{
+  const rec = { box: 3, errors: 0, lastDay: 100 };
+  ok('верный ответ до срока box не повышает', applyAnswer(rec, true, 102).box === 3);
+  ok('…и дату не сдвигает', applyAnswer(rec, true, 102).lastDay === 100);
+  ok('верный ответ в срок повышает box', applyAnswer(rec, true, 107).box === 4);
+  ok('ошибка до срока всё равно сбрасывает в box 1', applyAnswer(rec, false, 102).box === 1);
+  // «знаю» за один вечер больше не получить
+  let p = applyAnswer(undefined, true, 500);
+  for (let i = 0; i < 10; i++) p = applyAnswer(p, true, 500);
+  ok('десять верных ответов в один день — box 2, не 5', p.box === 2, `box ${p.box}`);
+}
+
+console.log('\nдень по местному времени');
+{
+  // 2026-11-10 22:30 UTC = 11 ноября 01:30 по Москве
+  const ms = Date.UTC(2026, 10, 10, 22, 30);
+  ok('в Москве после полуночи — уже следующий день', dayOf(ms, -180) === dayOf(ms, 0) + 1);
+  ok('в UTC — ещё тот же', dayOf(Date.UTC(2026, 10, 10, 0, 0), 0) === dayOf(ms, 0));
 }
 
 console.log('\nурок из 20 слов');
@@ -139,6 +183,36 @@ console.log('\nпропорция урока');
   ok('когда повторов мало — их около 30%', review2 >= 4 && review2 <= 8, `${review2}/20`);
 }
 
+console.log('\nпросроченные повторы не ждут новых слов');
+{
+  const pool = poolFor(WORDS, 'level', 'B2');
+  const day = 2000;
+  const progress = { B2: {} };
+  // 5 давно выученных слов, просроченных на месяц; остальные 235 — новые
+  const mature = pool.slice(0, 5);
+  mature.forEach((w) => (progress.B2[w.id] = { box: 4, errors: 0, lastDay: day - 50 }));
+  const words = pickLessonWords(pool, progress, 20, day);
+  const got = words.filter((w) => progress.B2[w.id]).length;
+  ok('все 5 просроченных box 4 попали в урок', got === 5, `${got}/5`);
+
+  // просроченный сильнее идёт первым, даже если box выше
+  const p2 = { B2: {} };
+  pool.slice(0, 40).forEach((w) => (p2.B2[w.id] = { box: 1, errors: 1, lastDay: day - 1 }));
+  p2.B2[pool[40].id] = { box: 5, errors: 0, lastDay: day - 200 };
+  const words2 = pickLessonWords(pool, p2, 10, day);
+  ok('слово, просроченное на полгода, не теряется среди 40 вчерашних ошибок', words2.some((w) => w.id === pool[40].id));
+}
+
+console.log('\nтематические наборы по уровню');
+{
+  for (const set of ['it-work', 'meetings', 'phrasal']) {
+    for (const level of ['B1', 'B2']) {
+      const pool = poolFor(WORDS, set, level);
+      ok(`${set} × ${level}: ${pool.length} слов, все уровня ${level}`, pool.length >= 4 && pool.every((w) => w.level === level));
+    }
+  }
+}
+
 console.log('\nсвои слова');
 {
   const custom = {
@@ -165,6 +239,11 @@ console.log('\nсвои слова');
     wrongOnes.join(', '),
   );
 
+  const phrase = { ...custom, id: 'break-a-leg', en: 'break a leg', ru: ['ни пуха ни пера'], pos: 'phrase' };
+  const allP = [...WORDS, phrase];
+  const cardP = buildCard(phrase, poolFor(allP, 'level', 'B1'), allP);
+  ok('своё «выражение» (их нет в словаре) тоже получает 4 варианта', cardP.options.length === 4, `${cardP.options.length}`);
+
   const asDistractor = WORDS.filter((w) => w.pos === 'verb' && w.level === 'B1').slice(0, 1)[0];
   const card2 = buildCard(asDistractor, pool, all);
   ok('своё слово не ломает подбор для остальных', card2.options.length === 4);
@@ -173,11 +252,20 @@ console.log('\nсвои слова');
 console.log('\n«повторить ошибки»');
 {
   const pool = poolFor(WORDS, 'level', 'B1');
-  const progress = { B1: {} };
-  pool.slice(0, 5).forEach((w) => (progress.B1[w.id] = { box: 1, errors: 2, lastDay: 900 }));
-  pool.slice(5, 10).forEach((w) => (progress.B1[w.id] = { box: 4, errors: 0, lastDay: 900 }));
-  const repeat = pickRepeatWords(pool, progress, 20);
-  ok('берёт только box 1–2', repeat.length === 5 && repeat.every((w) => progress.B1[w.id].box <= 2), `${repeat.length}`);
+  // идеальный урок: ни одной ошибки — повторять нечего
+  let state = createLesson(pool.slice(0, 10), pool, WORDS);
+  while (!isLessonOver(state)) state = answerCard(state, true);
+  ok('после урока без ошибок повторять нечего', lessonMistakes(state).length === 0);
+
+  state = createLesson(pool.slice(0, 10), pool, WORDS);
+  let n = 0;
+  while (!isLessonOver(state)) {
+    const card = currentCard(state);
+    const firstTime = !state.wrong[card.word.id];
+    state = answerCard(state, !(firstTime && n++ < 3));
+  }
+  const repeat = lessonMistakes(state);
+  ok('повторяются ровно ошибки этого урока', repeat.length === 3, `${repeat.length}`);
 }
 
 console.log('\nхранилище');

@@ -1,4 +1,4 @@
-import type { Level } from '../data/words';
+import { LEVELS, type Level } from '../data/words';
 import { storage } from '../telegram/webapp';
 import type { LevelProgress, Progress } from './leitner';
 
@@ -17,7 +17,6 @@ import type { LevelProgress, Progress } from './leitner';
 
 const MAX_VALUE = 4096;
 const PREFIX = 'progress_';
-const LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
 
 const baseKey = (level: Level) => `${PREFIX}${level.toLowerCase()}`;
 const shardKey = (level: Level, i: number) => (i === 0 ? baseKey(level) : `${baseKey(level)}_${i}`);

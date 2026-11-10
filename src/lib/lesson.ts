@@ -37,18 +37,24 @@ const shuffle = <T,>(items: T[]): T[] => {
   return out;
 };
 
-/** Слова набора и уровня, из которых вообще можно составить урок. */
+/**
+ * Слова набора и уровня, из которых вообще можно составить урок.
+ * Тематический набор тоже режется по уровню — иначе переключатель уровня
+ * на главной для него ничего бы не значил.
+ */
 export function poolFor(words: Word[], set: string, level: Level): Word[] {
   if (set === 'level') return words.filter((w) => w.level === level);
-  return words.filter((w) => w.sets.includes(set));
+  return words.filter((w) => w.level === level && w.sets.includes(set));
 }
 
 /** Если слов на повторе больше этого — пропорция урока переворачивается. */
 const REVIEW_FLIP = 30;
 
 /**
- * 70% новых и давно не встречавшихся, 30% из низких box.
- * Когда повторов накопилось больше тридцати — наоборот.
+ * 70% новых, 30% повторов. Когда повторов накопилось больше тридцати —
+ * наоборот. Повторы — все слова, у которых наступил срок, любого box:
+ * первыми самые просроченные, при равенстве — с меньшим box. Так давно
+ * выученное слово не ждёт, пока кончатся новые.
  */
 export function pickLessonWords(
   pool: Word[],
@@ -59,27 +65,22 @@ export function pickLessonWords(
   const recordOf = (w: Word): WordProgress | undefined => progress[w.level]?.[w.id];
 
   const fresh: Word[] = [];
-  const lowBox: Word[] = [];
-  const staleDue: Word[] = [];
+  const due: Word[] = [];
   const resting: Word[] = [];
 
   for (const word of pool) {
     const record = recordOf(word);
     if (!record) fresh.push(word);
-    else if (!isDue(record, day)) resting.push(word);
-    else if (record.box <= 2) lowBox.push(word);
-    else staleDue.push(word);
+    else if (isDue(record, day)) due.push(word);
+    else resting.push(word);
   }
 
-  const byOverdue = (a: Word, b: Word) =>
-    overdueBy(recordOf(b)!, day) - overdueBy(recordOf(a)!, day);
-
-  const groupNew = [...shuffle(fresh), ...staleDue.sort(byOverdue)];
-  const groupReview = lowBox.sort((a, b) => {
+  const groupReview = due.sort((a, b) => {
     const ra = recordOf(a)!;
     const rb = recordOf(b)!;
-    return ra.box - rb.box || byOverdue(a, b);
+    return overdueBy(rb, day) - overdueBy(ra, day) || ra.box - rb.box;
   });
+  const groupNew = shuffle(fresh);
 
   const reviewShare = groupReview.length > REVIEW_FLIP ? 0.7 : 0.3;
   const wantReview = Math.round(size * reviewShare);
@@ -89,7 +90,8 @@ export function pickLessonWords(
     ...groupNew.slice(0, size - Math.min(wantReview, groupReview.length)),
   ];
 
-  // Добираем из того, что осталось: сначала повторы, потом отдыхающие слова.
+  // Добираем из того, что осталось: сначала повторы и новые, потом отдыхающие.
+  // Отдыхающее слово в уроке box не повышает (см. applyAnswer) — это просто тренировка.
   if (picked.length < size) {
     const taken = new Set(picked.map((w) => w.id));
     for (const word of [...groupReview, ...groupNew, ...shuffle(resting)]) {
@@ -103,16 +105,6 @@ export function pickLessonWords(
   return shuffle(picked.slice(0, size));
 }
 
-/** «Повторить ошибки» — только box 1–2. */
-export function pickRepeatWords(pool: Word[], progress: Progress, size: number): Word[] {
-  const low = pool.filter((w) => {
-    const record = progress[w.level]?.[w.id];
-    return record !== undefined && record.box <= 2;
-  });
-  low.sort((a, b) => progress[a.level]![a.id].box - progress[b.level]![b.id].box);
-  return low.slice(0, size);
-}
-
 // ─── варианты ответа ──────────────────────────────────────────────────────
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -124,10 +116,14 @@ const optionText = (word: Word) => word.ru[0];
  * Три дистрактора того же уровня и той же части речи.
  * Иначе ответ угадывается по грамматике: «прилежный» среди трёх
  * существительных виден сразу.
+ *
+ * Ни один неправильный вариант не может совпадать с любым значением
+ * самого слова: для benefit [польза, выгода, преимущество] вариант
+ * «преимущество» от advantage был бы верным ответом, засчитанным как ошибка.
  */
 export function buildCard(word: Word, pool: Word[], all: Word[]): LessonCard {
   const correct = optionText(word);
-  const used = new Set([norm(correct)]);
+  const used = new Set(word.ru.map(norm));
   const options: string[] = [];
 
   // Ложный друг идёт первым: он должен попасть в четвёрку обязательно.
@@ -136,14 +132,18 @@ export function buildCard(word: Word, pool: Word[], all: Word[]): LessonCard {
     used.add(norm(word.falseFriendRu));
   }
 
+  const others = (source: Word[]) => source.filter((w) => w.id !== word.id);
   const sameKind = (source: Word[]) =>
-    source.filter((w) => w.id !== word.id && w.pos === word.pos && w.level === word.level);
+    others(source).filter((w) => w.pos === word.pos && w.level === word.level);
 
   const candidates = [
     ...shuffle(sameKind(pool)),
     ...shuffle(sameKind(all)),
-    // Запасной вариант, если слов такой части речи почему-то мало.
-    ...shuffle(all.filter((w) => w.id !== word.id && w.pos === word.pos)),
+    // Запасной вариант, если слов такой части речи и уровня мало.
+    ...shuffle(others(all).filter((w) => w.pos === word.pos)),
+    // Последний запас: своё слово редкой части речи (например, «выражение»,
+    // которых в словаре нет) не должно остаться с одним вариантом.
+    ...shuffle(others(all)),
   ];
 
   for (const candidate of candidates) {

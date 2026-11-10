@@ -1,5 +1,6 @@
 export type Pos = 'noun' | 'verb' | 'adj' | 'adv' | 'phrase' | 'phrasal';
 export type Level = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
+export const LEVELS: readonly Level[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
 
 export type Word = {
   /** совпадает с en в нижнем регистре, дефисы вместо пробелов: "figure-out" */
