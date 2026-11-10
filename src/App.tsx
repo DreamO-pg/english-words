@@ -34,6 +34,7 @@ import {
   checkHomeScreen,
   confirmAction,
   isOutdatedClient,
+  isSdkMissing,
   onHomeScreenAdded,
   setBackButton,
   setClosingConfirmation,
@@ -105,8 +106,8 @@ export function App() {
   }, [sync]);
 
   useEffect(() => {
-    // На клиенте без CloudStorage читать нечего — там экран «обновите Telegram».
-    if (isOutdatedClient) return;
+    // Без CloudStorage (старый клиент или не загрузился SDK) читать нечего.
+    if (isOutdatedClient || isSdkMissing) return;
     void loadAll();
     checkHomeScreen().then(setHomeScreenStatus);
     return onHomeScreenAdded(() => setHomeScreenStatus('added'));
@@ -211,13 +212,15 @@ export function App() {
         touched.add(level);
       }
 
-      const mistakes = Object.keys(state.wrong).length;
+      const wrongWords = Object.keys(state.wrong).length;
+      const wrongAnswers = Object.values(state.wrong).reduce((sum, n) => sum + n, 0);
       const nextStats = recordLesson(
         stats,
         {
           size: state.cards.length,
-          correct: state.cards.length - mistakes,
+          firstTry: state.cards.length - wrongWords,
           answers: state.queue.length,
+          wrongAnswers,
         },
         day,
       );
@@ -306,7 +309,8 @@ export function App() {
     />
   );
 
-  if (isOutdatedClient) return <UpdateScreen />;
+  if (isSdkMissing) return <UpdateScreen reason="sdk" />;
+  if (isOutdatedClient) return <UpdateScreen reason="outdated" />;
   if (load !== 'ready') return <LoadScreen failed={load === 'error'} onRetry={loadAll} />;
 
   const banner = notice ? (

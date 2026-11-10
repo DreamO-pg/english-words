@@ -16,9 +16,21 @@ const sdk: TelegramWebApp | undefined =
  * на CloudStorage и BackButton. Поэтому за настоящий телеграм считаем
  * только живую платформу, а всё остальное уводим в браузерный фолбэк.
  */
-export const isTelegram = Boolean(sdk && sdk.platform !== 'unknown');
+const isTelegram = Boolean(sdk && sdk.platform !== 'unknown');
 
 const raw = isTelegram ? sdk : undefined;
+
+/**
+ * Телеграм открыл приложение, а telegram-web-app.js не загрузился (сбой сети,
+ * блокировка telegram.org). Без этой проверки приложение молча ушло бы в
+ * браузерный фолбэк и писало прогресс в localStorage вебвью, а при следующем
+ * запуске показало бы облачный — два разных прогресса. Телеграм всегда
+ * передаёт параметры запуска в hash: tgWebAppData, tgWebAppPlatform, tgWebAppVersion.
+ */
+export const isSdkMissing =
+  typeof window !== 'undefined' &&
+  !sdk &&
+  /[#&]tgWebApp(Data|Platform|Version)=/.test(window.location.hash);
 
 /** Аккуратно вызвать метод SDK: старые клиенты его могут не знать. */
 function safe(fn: () => void) {
@@ -80,21 +92,6 @@ export function initWebApp() {
 function applyHeight() {
   const h = raw?.viewportStableHeight || window.innerHeight;
   document.documentElement.style.setProperty('--app-height', `${h}px`);
-}
-
-export function getViewportHeight(): number {
-  return raw?.viewportStableHeight || window.innerHeight;
-}
-
-/** Подписка на изменение высоты вьюпорта. Возвращает отписку. */
-export function onViewportChange(cb: (height: number) => void): () => void {
-  const handler = () => cb(getViewportHeight());
-  if (raw) {
-    raw.onEvent('viewportChanged', handler);
-    return () => raw.offEvent('viewportChanged', handler);
-  }
-  window.addEventListener('resize', handler);
-  return () => window.removeEventListener('resize', handler);
 }
 
 // ─── кнопка «назад» ───────────────────────────────────────────────────────

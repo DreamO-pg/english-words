@@ -29,7 +29,6 @@ const ok = (name, cond, extra = '') => {
   }
 };
 
-const byId = Object.fromEntries(WORDS.map((w) => [w.id, w]));
 
 console.log('\nдистракторы');
 {
@@ -288,17 +287,19 @@ console.log('\nхранилище');
 
 console.log('\nсчётчики и серия дней');
 {
-  let stats = recordLesson(EMPTY_STATS, { size: 20, correct: 18, answers: 23 }, 100);
+  let stats = recordLesson(EMPTY_STATS, { size: 20, firstTry: 18, answers: 23, wrongAnswers: 3 }, 100);
   ok('первый урок начинает серию', stats.streak === 1 && stats.lessons === 1);
-  stats = recordLesson(stats, { size: 20, correct: 20, answers: 20 }, 100);
+  ok('история хранит слова с первого раза', stats.history[0].ok === 18);
+  ok('точность считается по ответам: 20 верных из 23', stats.answers === 23 && stats.correct === 20, `${stats.correct}/${stats.answers}`);
+  stats = recordLesson(stats, { size: 20, firstTry: 20, answers: 20, wrongAnswers: 0 }, 100);
   ok('второй урок в тот же день серию не удлиняет', stats.streak === 1 && stats.lessons === 2);
-  stats = recordLesson(stats, { size: 20, correct: 20, answers: 20 }, 101);
+  stats = recordLesson(stats, { size: 20, firstTry: 20, answers: 20, wrongAnswers: 0 }, 101);
   ok('следующий день продлевает серию', stats.streak === 2);
-  stats = recordLesson(stats, { size: 20, correct: 20, answers: 20 }, 105);
+  stats = recordLesson(stats, { size: 20, firstTry: 20, answers: 20, wrongAnswers: 0 }, 105);
   ok('пропуск обнуляет серию', stats.streak === 1 && stats.bestStreak === 2);
 
   let many = EMPTY_STATS;
-  for (let d = 0; d < 30; d++) many = recordLesson(many, { size: 10, correct: 9, answers: 11 }, 200 + d);
+  for (let d = 0; d < 30; d++) many = recordLesson(many, { size: 10, firstTry: 9, answers: 11, wrongAnswers: 1 }, 200 + d);
   ok('история хранит последние 20 уроков', many.history.length === 20 && many.history[19].d === 229);
   ok('ключ stats остаётся коротким', JSON.stringify(many).length < 4096, `${JSON.stringify(many).length} символов`);
 }

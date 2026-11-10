@@ -41,7 +41,7 @@ export function WordsScreen({
   const found = useMemo(() => {
     const q = query.trim().toLowerCase();
     return words.filter((word) => {
-      const record = recordOf(word);
+      const record = progress[word.level]?.[word.id];
       if (filter === 'learning' && !(record && record.box < 5)) return false;
       if (filter === 'known' && !(record && record.box >= 5)) return false;
       if (filter === 'hard' && !(record && record.errors >= 2)) return false;
@@ -51,8 +51,6 @@ export function WordsScreen({
         word.ru.some((r) => r.toLowerCase().includes(q))
       );
     });
-    // recordOf зависит только от progress
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [words, progress, query, filter]);
 
   const visible = found.slice(0, limit);

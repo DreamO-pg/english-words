@@ -226,16 +226,6 @@ export function Chip({
   );
 }
 
-/** Заглушка на время сборки экранов. */
-export function Placeholder({ title, note }: { title: string; note: string }) {
-  return (
-    <div style={{ paddingTop: 40 }}>
-      <div style={{ fontFamily: 'var(--font-serif)', fontSize: 30, fontWeight: 500 }}>{title}</div>
-      <div style={{ marginTop: 8, color: colors.muted, fontSize: 14 }}>{note}</div>
-    </div>
-  );
-}
-
 /** Плашка о сбое: текст и одно действие. */
 export function Banner({
   text,

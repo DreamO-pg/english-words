@@ -6,7 +6,6 @@ const ids = new Set();
 const byLevelPos = {};
 // дифтонг считаем одним слогом, иначе односложные crowd/vague ложно попадают в ошибки
 const diphthongs = /aʊ|aɪ|eɪ|əʊ|ɔɪ|ɪə|eə|ʊə/g;
-const vowels = /[aeiouɪʊəɜɔɑʌæɒɛ]/g;
 const syllables = (ipa) => (ipa.replace(diphthongs, 'D').match(/[Daeiouɪʊəɜɔɑʌæɒɛ]/g) || []).length;
 
 for (const w of WORDS) {

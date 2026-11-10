@@ -14,7 +14,9 @@ export type LessonRecord = {
 
 export type Stats = {
   lessons: number;
+  /** всего ответов за всё время (включая повторные показы ошибок) */
   answers: number;
+  /** из них верных — доля correct / answers и есть точность */
   correct: number;
   streak: number;
   bestStreak: number;
@@ -49,23 +51,31 @@ export async function saveStats(stats: Stats): Promise<void> {
   await storage.set(KEY, JSON.stringify(stats));
 }
 
+/**
+ * Итог урока. Две разные меры, и путать их нельзя:
+ * firstTry — сколько слов закрыто с первого раза (это кольцо на экране итога
+ * и `ok` в истории), answers / wrongAnswers — все ответы и ошибочные из них.
+ */
+export type LessonOutcome = {
+  size: number;
+  firstTry: number;
+  answers: number;
+  wrongAnswers: number;
+};
+
 /** Считаем урок закрытым: обновляем серию дней и историю. */
-export function recordLesson(
-  stats: Stats,
-  lesson: { size: number; correct: number; answers: number },
-  day = today(),
-): Stats {
+export function recordLesson(stats: Stats, lesson: LessonOutcome, day = today()): Stats {
   const streak =
     stats.lastDay === day ? stats.streak : day - stats.lastDay === 1 ? stats.streak + 1 : 1;
 
-  const history = [...stats.history, { d: day, n: lesson.size, ok: lesson.correct }].slice(
+  const history = [...stats.history, { d: day, n: lesson.size, ok: lesson.firstTry }].slice(
     -HISTORY_LIMIT,
   );
 
   return {
     lessons: stats.lessons + 1,
     answers: stats.answers + lesson.answers,
-    correct: stats.correct + lesson.correct,
+    correct: stats.correct + (lesson.answers - lesson.wrongAnswers),
     streak,
     bestStreak: Math.max(stats.bestStreak, streak),
     lastDay: day,
