@@ -342,7 +342,7 @@ export const WORDS_B1_5: Word[] = [
     level: 'B1',
     sets: [],
     exampleEn: 'He felt guilty about leaving so early.',
-    exampleRu: 'Ему было неловко, что он ушёл так рано.',
+    exampleRu: 'Он чувствовал себя виноватым, что ушёл так рано.',
     collocations: ['feel guilty', 'found guilty'],
   },
   {

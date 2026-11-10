@@ -17,6 +17,12 @@ for (const w of WORDS) {
   if (!/^\/.+\/$/.test(w.ipa)) problems.push(`ipa не в слэшах: ${w.id}`);
   const syll = syllables(w.ipa);
   if (syll > 1 && !/[ˈ]/.test(w.ipa)) problems.push(`нет главного ударения: ${w.id} ${w.ipa}`);
+  // Британский МФА неротический: r на конце слова не произносится, если
+  // дальше не идёт гласная (figure out /ˌfɪɡər ˈaʊt/ — связующий r, это можно).
+  const body = w.ipa.slice(1, -1);
+  if (/r$/.test(body) || /r [ˈˌ]?[^aeiouɪʊəɜɔɑʌæɒɛ ˈˌ]/.test(body))
+    problems.push(`американский r на конце слова: ${w.id} ${w.ipa}`);
+  if (/[ɝɚɹ]/.test(w.ipa)) problems.push(`американский символ в МФА: ${w.id} ${w.ipa}`);
   if (!POS_LABEL[w.pos]) problems.push(`неизвестная часть речи: ${w.id}`);
   if (w.ru.length < 1 || w.ru.length > 3) problems.push(`ru не 1–3 значения: ${w.id}`);
   const n = w.exampleEn.split(/\s+/).length;
