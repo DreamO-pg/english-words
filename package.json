@@ -8,17 +8,31 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check:words": "esbuild src/data/words.ts --bundle --format=esm --outfile=.cache/words.mjs --log-level=error && node scripts/check-words.mjs",
-    "check:engine": "esbuild scripts/engine-entry.ts --bundle --format=esm --outfile=.cache/engine.mjs --log-level=error && node scripts/check-engine.mjs"
+    "check:engine": "esbuild scripts/engine-entry.ts --bundle --format=esm --outfile=.cache/engine.mjs --log-level=error && node scripts/check-engine.mjs",
+    "check:storage": "esbuild scripts/storage-entry.ts --bundle --format=esm --outfile=.cache/storage.mjs --log-level=error && node scripts/check-storage.mjs",
+    "lint": "eslint .",
+    "check": "npm run lint && npm run check:words && npm run check:engine && npm run check:storage"
   },
   "dependencies": {
+    "@fontsource-variable/literata": "^5.3.0",
+    "@fontsource/golos-text": "^5.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.21.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.5.0",
     "typescript": "^5.6.3",
+    "typescript-eslint": "^8.72.2",
     "vite": "^5.4.11"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

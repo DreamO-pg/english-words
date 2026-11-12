@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { POS_LABEL, type Level, type Pos } from '../data/words';
 import { colors, radius } from '../theme/colors';
 import { PrimaryButton, Screen, SectionTitle } from '../components/ui';
-import type { CustomDraft } from '../lib/customWords';
+import { LIMITS, type CustomDraft } from '../lib/customWords';
 import { haptic } from '../telegram/webapp';
 
 const POS_ORDER: Pos[] = ['noun', 'verb', 'adj', 'adv', 'phrasal', 'phrase'];
@@ -14,7 +14,8 @@ export function AddWordScreen({
   onCancel,
 }: {
   level: Level;
-  onSave: (draft: CustomDraft) => void;
+  /** Возвращает текст ошибки или null, если сохранено. */
+  onSave: (draft: CustomDraft) => Promise<string | null>;
   onCancel: () => void;
 }) {
   const [en, setEn] = useState('');
@@ -23,17 +24,35 @@ export function AddWordScreen({
   const [exampleRu, setExampleRu] = useState('');
   const [pos, setPos] = useState<Pos>('noun');
 
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const valid = en.trim().length > 0 && ru.trim().length > 0;
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    const message = await onSave({ en, ru, exampleEn, exampleRu, pos, level });
+    // При успехе экран уже закрыт — состояние трогаем только при ошибке.
+    if (message) {
+      haptic.error();
+      setError(message);
+      setSaving(false);
+    }
+  };
 
   return (
     <Screen
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <PrimaryButton
-            disabled={!valid}
-            onClick={() => onSave({ en, ru, exampleEn, exampleRu, pos, level })}
-          >
-            Сохранить
+          {error && (
+            <div role="alert" style={{ fontSize: 13, color: colors.bad, lineHeight: 1.35 }}>
+              {error}
+            </div>
+          )}
+          <PrimaryButton disabled={!valid || saving} onClick={() => void save()}>
+            {saving ? 'Сохраняю…' : 'Сохранить'}
           </PrimaryButton>
           <PrimaryButton tone="quiet" onClick={onCancel}>
             Отмена
@@ -52,12 +71,20 @@ export function AddWordScreen({
         Своё слово
       </h1>
 
-      <Field label="Слово" value={en} onChange={setEn} placeholder="diligent" serif />
+      <Field
+        label="Слово"
+        value={en}
+        onChange={setEn}
+        placeholder="diligent"
+        maxLength={LIMITS.en}
+        serif
+      />
       <Field
         label="Перевод"
         value={ru}
         onChange={setRu}
         placeholder="прилежный, старательный"
+        maxLength={LIMITS.ru}
         hint="Несколько значений — через запятую, до трёх"
       />
 
@@ -97,6 +124,7 @@ export function AddWordScreen({
           value={exampleEn}
           onChange={setExampleEn}
           placeholder="She is a diligent student."
+          maxLength={LIMITS.example}
           multiline
         />
         <Field
@@ -105,6 +133,7 @@ export function AddWordScreen({
           onChange={setExampleRu}
           placeholder="Она прилежная студентка."
           hint="Необязательно"
+          maxLength={LIMITS.example}
           multiline
         />
       </div>
@@ -127,6 +156,7 @@ function Field({
   hint,
   serif,
   multiline,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -135,6 +165,7 @@ function Field({
   hint?: string;
   serif?: boolean;
   multiline?: boolean;
+  maxLength?: number;
 }) {
   const style = {
     width: '100%',
@@ -159,6 +190,7 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          maxLength={maxLength}
           rows={2}
           style={style}
         />
@@ -167,6 +199,7 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          maxLength={maxLength}
           style={style}
         />
       )}

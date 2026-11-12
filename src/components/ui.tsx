@@ -226,12 +226,40 @@ export function Chip({
   );
 }
 
-/** Заглушка на время сборки экранов. */
-export function Placeholder({ title, note }: { title: string; note: string }) {
+/** Плашка о сбое: текст и одно действие. */
+export function Banner({
+  text,
+  action,
+  onAction,
+}: {
+  text: string;
+  action: string;
+  onAction: () => void;
+}) {
   return (
-    <div style={{ paddingTop: 40 }}>
-      <div style={{ fontFamily: 'var(--font-serif)', fontSize: 30, fontWeight: 500 }}>{title}</div>
-      <div style={{ marginTop: 8, color: colors.muted, fontSize: 14 }}>{note}</div>
+    <div
+      role="status"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 24px',
+        background: colors.badBg,
+        color: colors.ink,
+        fontSize: 13,
+        lineHeight: 1.35,
+      }}
+    >
+      <span style={{ flex: 1 }}>{text}</span>
+      <button
+        onClick={() => {
+          haptic.tap();
+          onAction();
+        }}
+        style={{ color: colors.bad, fontWeight: 600, fontSize: 14, padding: '4px 0' }}
+      >
+        {action}
+      </button>
     </div>
   );
 }

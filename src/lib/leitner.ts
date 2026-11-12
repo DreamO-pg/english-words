@@ -12,8 +12,19 @@ export const MAX_BOX = 5;
 const DAY_EPOCH = Date.UTC(2020, 0, 1);
 const DAY_MS = 86_400_000;
 
+/**
+ * Номер дня по местному времени: в Москве день меняется в полночь,
+ * а не в 03:00, как было бы по UTC. Урок в час ночи — это ещё сегодня
+ * для серии, но уже «новый день» по календарю пользователя.
+ * `offsetMinutes` — как у Date#getTimezoneOffset (для Москвы −180).
+ */
+export function dayOf(ms: number, offsetMinutes: number): number {
+  return Math.floor((ms - offsetMinutes * 60_000 - DAY_EPOCH) / DAY_MS);
+}
+
 export function today(): number {
-  return Math.floor((Date.now() - DAY_EPOCH) / DAY_MS);
+  const now = new Date();
+  return dayOf(now.getTime(), now.getTimezoneOffset());
 }
 
 export type WordProgress = {
@@ -46,6 +57,10 @@ export function applyAnswer(
 ): WordProgress {
   const errors = prev?.errors ?? 0;
   if (!correct) return { box: 1, errors: errors + 1, lastDay: day };
+  // Срок ещё не наступил — слово показали раньше времени (добор урока,
+  // повтор ошибок). Верный ответ сейчас ничего не говорит о долгой памяти:
+  // box и дату не трогаем, иначе слово дошло бы до «знаю» за один вечер.
+  if (prev && !isDue(prev, day)) return prev;
   // Новое слово считаем лежащим в box 1: угадал с первого раза — сразу box 2,
   // иначе верный ответ и ошибка давали бы одно и то же, а по легенде точек
   // одна красная — это «только ошибся».

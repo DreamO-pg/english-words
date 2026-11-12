@@ -16,9 +16,21 @@ const sdk: TelegramWebApp | undefined =
  * на CloudStorage и BackButton. Поэтому за настоящий телеграм считаем
  * только живую платформу, а всё остальное уводим в браузерный фолбэк.
  */
-export const isTelegram = Boolean(sdk && sdk.platform !== 'unknown');
+const isTelegram = Boolean(sdk && sdk.platform !== 'unknown');
 
 const raw = isTelegram ? sdk : undefined;
+
+/**
+ * Телеграм открыл приложение, а telegram-web-app.js не загрузился (сбой сети,
+ * блокировка telegram.org). Без этой проверки приложение молча ушло бы в
+ * браузерный фолбэк и писало прогресс в localStorage вебвью, а при следующем
+ * запуске показало бы облачный — два разных прогресса. Телеграм всегда
+ * передаёт параметры запуска в hash: tgWebAppData, tgWebAppPlatform, tgWebAppVersion.
+ */
+export const isSdkMissing =
+  typeof window !== 'undefined' &&
+  !sdk &&
+  /[#&]tgWebApp(Data|Platform|Version)=/.test(window.location.hash);
 
 /** Аккуратно вызвать метод SDK: старые клиенты его могут не знать. */
 function safe(fn: () => void) {
@@ -28,6 +40,28 @@ function safe(fn: () => void) {
     /* старый клиент — просто пропускаем */
   }
 }
+
+/**
+ * Клиент поддерживает этот метод? На старых клиентах SDK на неподдержанный
+ * метод пишет в консоль ошибку или бросает — поэтому сначала спрашиваем версию.
+ */
+function since(version: string): boolean {
+  if (!raw) return false;
+  try {
+    return raw.isVersionAtLeast(version);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Минимальная версия, с которой приложение работает полноценно: 6.9 —
+ * это CloudStorage. Ниже прогресс сохранять некуда, и честнее сказать
+ * «обновите Telegram», чем молча терять уроки.
+ */
+export const MIN_VERSION = '6.9';
+export const isOutdatedClient = Boolean(raw) && !since(MIN_VERSION);
+export const clientVersion = raw?.version ?? '';
 
 // ─── старт ────────────────────────────────────────────────────────────────
 
@@ -43,10 +77,13 @@ export function initWebApp() {
   safe(() => raw.ready());
   safe(() => raw.expand());
   // Иначе свайп по списку вариантов сворачивает окно.
-  safe(() => raw.disableVerticalSwipes?.());
+  if (since('7.7')) safe(() => raw.disableVerticalSwipes?.());
   // Тема фиксированно светлая, themeParams пользователя игнорируем.
-  safe(() => raw.setHeaderColor(colors.bg));
-  safe(() => raw.setBackgroundColor(colors.bg));
+  // Цвет шапки hex-строкой — с 6.9, раньше только ключи темы.
+  if (since('6.9')) safe(() => raw.setHeaderColor(colors.bg));
+  if (since('6.1')) safe(() => raw.setBackgroundColor(colors.bg));
+  // Нижняя полоса (Android, iOS) иначе остаётся цвета темы — тёмной в тёмной теме.
+  if (since('7.10')) safe(() => raw.setBottomBarColor?.(colors.bg));
 
   raw.onEvent('viewportChanged', applyHeight);
 }
@@ -55,21 +92,6 @@ export function initWebApp() {
 function applyHeight() {
   const h = raw?.viewportStableHeight || window.innerHeight;
   document.documentElement.style.setProperty('--app-height', `${h}px`);
-}
-
-export function getViewportHeight(): number {
-  return raw?.viewportStableHeight || window.innerHeight;
-}
-
-/** Подписка на изменение высоты вьюпорта. Возвращает отписку. */
-export function onViewportChange(cb: (height: number) => void): () => void {
-  const handler = () => cb(getViewportHeight());
-  if (raw) {
-    raw.onEvent('viewportChanged', handler);
-    return () => raw.offEvent('viewportChanged', handler);
-  }
-  window.addEventListener('resize', handler);
-  return () => window.removeEventListener('resize', handler);
 }
 
 // ─── кнопка «назад» ───────────────────────────────────────────────────────
@@ -86,6 +108,7 @@ export function setBackButton(handler: (() => void) | null): () => void {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }
+  if (!since('6.1')) return () => {};
   const back = raw.BackButton;
   if (!handler) {
     safe(() => back.hide());
@@ -105,119 +128,191 @@ export function setBackButton(handler: (() => void) | null): () => void {
 
 // ─── тактильный отклик ────────────────────────────────────────────────────
 
+const hapticOk = () => since('6.1');
+
 export const haptic = {
   success() {
-    safe(() => raw?.HapticFeedback.notificationOccurred('success'));
+    if (hapticOk()) safe(() => raw?.HapticFeedback.notificationOccurred('success'));
   },
   error() {
-    safe(() => raw?.HapticFeedback.notificationOccurred('error'));
+    if (hapticOk()) safe(() => raw?.HapticFeedback.notificationOccurred('error'));
   },
   select() {
-    safe(() => raw?.HapticFeedback.selectionChanged());
+    if (hapticOk()) safe(() => raw?.HapticFeedback.selectionChanged());
   },
   tap() {
-    safe(() => raw?.HapticFeedback.impactOccurred('light'));
+    if (hapticOk()) safe(() => raw?.HapticFeedback.impactOccurred('light'));
   },
 };
+
+// ─── подтверждения ────────────────────────────────────────────────────────
+
+/** Нативный диалог «ОК / Отмена»; в браузере и на старых клиентах — window.confirm. */
+export function confirmAction(message: string): Promise<boolean> {
+  if (raw && since('6.2')) {
+    return new Promise((resolve) => {
+      try {
+        raw.showConfirm(message, (ok) => resolve(Boolean(ok)));
+      } catch {
+        resolve(window.confirm(message));
+      }
+    });
+  }
+  return Promise.resolve(window.confirm(message));
+}
+
+/** Спрашивать ли «закрыть?» при сворачивании окна — включаем на время урока. */
+export function setClosingConfirmation(on: boolean) {
+  if (!raw || !since('6.2')) return;
+  safe(() => (on ? raw.enableClosingConfirmation() : raw.disableClosingConfirmation()));
+}
 
 // ─── хранилище ────────────────────────────────────────────────────────────
 
 const LS_PREFIX = 'ew:';
 
+/** Лимиты CloudStorage: ключ 1–128 символов из A-Z a-z 0-9 _ -, значение до 4096. */
+export const MAX_KEY = 128;
+export const MAX_VALUE = 4096;
+const KEY_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** Ответ не пришёл за это время — считаем сбоем, а не пустотой. */
+const TIMEOUT_MS = 8000;
+const ATTEMPTS = 3;
+
+/**
+ * Любой сбой хранилища — ошибка, а не «пусто». Пустой ответ и упавший запрос
+ * должны различаться: иначе после сбоя чтения приложение решит, что прогресса
+ * нет, и следующее сохранение перезапишет облако.
+ */
+export class StorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StorageError';
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Колбэк CloudStorage → промис с таймаутом. */
+function cloudCall<T>(fn: (done: (err: string | null, value: T) => void) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new StorageError('timeout')), TIMEOUT_MS);
+    try {
+      fn((err, value) => {
+        clearTimeout(timer);
+        if (err) reject(new StorageError(String(err)));
+        else resolve(value);
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      reject(new StorageError(e instanceof Error ? e.message : String(e)));
+    }
+  });
+}
+
+/** Сеть в телеграме бывает плохой — пара повторов с паузой. */
+async function withRetry<T>(op: () => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < ATTEMPTS; i++) {
+    try {
+      return await op();
+    } catch (e) {
+      last = e;
+      if (i < ATTEMPTS - 1) await sleep(300 * 2 ** i);
+    }
+  }
+  throw last instanceof StorageError ? last : new StorageError(String(last));
+}
+
+/** localStorage тоже может бросить: приватный режим, запрет хранилища. */
+function local<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    throw new StorageError(e instanceof Error ? e.message : String(e));
+  }
+}
+
+function assertWritable(key: string, value?: string) {
+  if (!KEY_RE.test(key)) throw new StorageError(`недопустимый ключ: ${key.slice(0, 40)}`);
+  if (value !== undefined && value.length > MAX_VALUE) {
+    throw new StorageError(`значение ключа ${key} длиннее ${MAX_VALUE} символов`);
+  }
+}
+
 /**
  * CloudStorage: до 1024 ключей, значение до 4096 символов.
  * В браузере — localStorage с тем же интерфейсом.
+ * Все методы при сбое бросают StorageError.
  */
 export const storage = {
   async get(key: string): Promise<string | null> {
-    if (!raw) return localStorage.getItem(LS_PREFIX + key);
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.getItem(key, (err, value) => {
-          resolve(err ? null : value ?? null);
-        });
-      } catch {
-        resolve(null);
-      }
-    });
+    if (!raw) return local(() => localStorage.getItem(LS_PREFIX + key));
+    return withRetry(() =>
+      cloudCall<string | null>((done) => raw.CloudStorage.getItem(key, done)),
+    ).then((v) => (v === '' || v === undefined ? null : v));
   },
 
   async getMany(keys: string[]): Promise<Record<string, string>> {
     if (keys.length === 0) return {};
     if (!raw) {
-      const out: Record<string, string> = {};
-      for (const k of keys) {
-        const v = localStorage.getItem(LS_PREFIX + k);
-        if (v !== null) out[k] = v;
-      }
-      return out;
+      return local(() => {
+        const out: Record<string, string> = {};
+        for (const k of keys) {
+          const v = localStorage.getItem(LS_PREFIX + k);
+          if (v !== null) out[k] = v;
+        }
+        return out;
+      });
     }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.getItems(keys, (err, values) => {
-          resolve(err || !values ? {} : values);
-        });
-      } catch {
-        resolve({});
-      }
-    });
+    const values = await withRetry(() =>
+      cloudCall<Record<string, string> | null>((done) => raw.CloudStorage.getItems(keys, done)),
+    );
+    if (!values) throw new StorageError('getItems вернул пустой ответ');
+    const out: Record<string, string> = {};
+    for (const k of keys) if (values[k]) out[k] = values[k];
+    return out;
   },
 
-  async set(key: string, value: string): Promise<boolean> {
-    if (value.length > 4096) {
-      console.warn(`[storage] значение ключа ${key} длиннее 4096 символов`);
-    }
-    if (!raw) {
-      try {
-        localStorage.setItem(LS_PREFIX + key, value);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.setItem(key, value, (err, ok) => resolve(!err && ok));
-      } catch {
-        resolve(false);
-      }
-    });
+  async set(key: string, value: string): Promise<void> {
+    assertWritable(key, value);
+    if (!raw) return local(() => localStorage.setItem(LS_PREFIX + key, value));
+    const ok = await withRetry(() =>
+      cloudCall<boolean>((done) => raw.CloudStorage.setItem(key, value, done)),
+    );
+    if (!ok) throw new StorageError(`setItem(${key}) не подтверждён`);
   },
 
-  async remove(key: string): Promise<boolean> {
-    if (!raw) {
-      localStorage.removeItem(LS_PREFIX + key);
-      return true;
-    }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.removeItem(key, (err, ok) => resolve(!err && ok));
-      } catch {
-        resolve(false);
-      }
-    });
+  async remove(key: string): Promise<void> {
+    assertWritable(key);
+    if (!raw) return local(() => localStorage.removeItem(LS_PREFIX + key));
+    const ok = await withRetry(() =>
+      cloudCall<boolean>((done) => raw.CloudStorage.removeItem(key, done)),
+    );
+    if (!ok) throw new StorageError(`removeItem(${key}) не подтверждён`);
   },
 
   async keys(): Promise<string[]> {
     if (!raw) {
-      return Object.keys(localStorage)
-        .filter((k) => k.startsWith(LS_PREFIX))
-        .map((k) => k.slice(LS_PREFIX.length));
+      return local(() =>
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith(LS_PREFIX))
+          .map((k) => k.slice(LS_PREFIX.length)),
+      );
     }
-    return new Promise((resolve) => {
-      try {
-        raw.CloudStorage.getKeys((err, keys) => resolve(err || !keys ? [] : keys));
-      } catch {
-        resolve([]);
-      }
-    });
+    const keys = await withRetry(() =>
+      cloudCall<string[] | null>((done) => raw.CloudStorage.getKeys(done)),
+    );
+    if (!keys) throw new StorageError('getKeys вернул пустой ответ');
+    return keys;
   },
 };
 
 // ─── экран «домой» ────────────────────────────────────────────────────────
 
 export async function checkHomeScreen(): Promise<HomeScreenStatus> {
-  if (!raw?.checkHomeScreenStatus) return 'unsupported';
+  if (!raw?.checkHomeScreenStatus || !since('8.0')) return 'unsupported';
   return new Promise((resolve) => {
     try {
       raw.checkHomeScreenStatus!((status) => resolve(status));
@@ -229,5 +324,15 @@ export async function checkHomeScreen(): Promise<HomeScreenStatus> {
 }
 
 export function addToHomeScreen() {
-  safe(() => raw?.addToHomeScreen?.());
+  if (since('8.0')) safe(() => raw?.addToHomeScreen?.());
+}
+
+/**
+ * Приложение действительно добавили на экран (8.0). Нажатие «Добавить»
+ * само по себе ничего не значит: пользователь может отменить системный диалог.
+ */
+export function onHomeScreenAdded(cb: () => void): () => void {
+  if (!raw || !since('8.0')) return () => {};
+  safe(() => raw.onEvent('homeScreenAdded', cb));
+  return () => safe(() => raw.offEvent('homeScreenAdded', cb));
 }

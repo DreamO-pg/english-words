@@ -69,13 +69,6 @@ export const IconList = ({ size = 24, color = 'currentColor', style }: Props) =>
   </svg>
 );
 
-export const IconArrowRight = ({ size = 24, color = 'currentColor', style }: Props) => (
-  <svg {...base(size, color, style)}>
-    <path d="M5 12h13" />
-    <path d="M13 6.5L18.5 12 13 17.5" />
-  </svg>
-);
-
 export const IconHome = ({ size = 24, color = 'currentColor', style }: Props) => (
   <svg {...base(size, color, style)}>
     <path d="M4 10.5L12 4l8 6.5V20H4z" />

@@ -1,5 +1,5 @@
 import { colors, radius } from '../theme/colors';
-import { SETS } from '../data/words';
+import { SETS, type Level } from '../data/words';
 import { PrimaryButton, Screen, SectionTitle, Segmented } from '../components/ui';
 import { IconFlame, IconHome, IconList } from '../components/icons';
 import type { Settings } from '../lib/settings';
@@ -11,6 +11,12 @@ type Props = {
   onStart: () => void;
   onOpenWords: () => void;
   summary: { known: number; learning: number; due: number; streak: number };
+  /** уровни, в которых есть слова */
+  levels: readonly Level[];
+  /** действующий уровень (настройка могла указывать на пустой) */
+  level: Level;
+  /** в выбранном наборе на этом уровне нет слов */
+  empty: boolean;
   /** показываем, только если телеграм говорит, что приложения на экране нет */
   homeScreen?: { onAdd: () => void; onDismiss: () => void };
 };
@@ -21,10 +27,26 @@ export function HomeScreen({
   onStart,
   onOpenWords,
   summary,
+  levels,
+  level,
+  empty,
   homeScreen,
 }: Props) {
+  const footer = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {empty && (
+        <div style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
+          В этом наборе нет слов уровня {level} — выберите другой набор или уровень
+        </div>
+      )}
+      <PrimaryButton disabled={empty} onClick={onStart}>
+        Учить
+      </PrimaryButton>
+    </div>
+  );
+
   return (
-    <Screen footer={<PrimaryButton onClick={onStart}>Учить</PrimaryButton>}>
+    <Screen footer={footer}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 30, fontWeight: 500, margin: 0 }}>
           Слова
@@ -114,15 +136,9 @@ export function HomeScreen({
 
       <SectionTitle style={{ marginTop: 26 }}>Уровень</SectionTitle>
       <Segmented
-        value={settings.level}
-        onChange={(level) => onChange({ level })}
-        options={[
-          { value: 'A1', label: 'A1' },
-          { value: 'A2', label: 'A2' },
-          { value: 'B1', label: 'B1' },
-          { value: 'B2', label: 'B2' },
-          { value: 'C1', label: 'C1' },
-        ]}
+        value={level}
+        onChange={(next) => onChange({ level: next })}
+        options={levels.map((value) => ({ value, label: value }))}
       />
 
       <SectionTitle style={{ marginTop: 26 }}>Слов в уроке</SectionTitle>

@@ -21,9 +21,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 20 — EOL с 30.04.2026
+          node-version: 22
           cache: npm
       - run: npm ci
+      # Линтер и проверки словаря, движка и хранения — до сборки:
+      # со сломанным словарём или движком деплоя не будет.
+      - run: npm run check
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

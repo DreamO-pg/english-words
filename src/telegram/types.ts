@@ -38,6 +38,14 @@ export interface TelegramWebApp {
   setHeaderColor(color: string): void;
   setBackgroundColor(color: string): void;
   disableVerticalSwipes?(): void;
+  /** 7.10+ */
+  setBottomBarColor?(color: string): void;
+  /** 6.2+ */
+  showConfirm(message: string, cb?: (ok: boolean) => void): void;
+  /** 6.2+ */
+  enableClosingConfirmation(): void;
+  /** 6.2+ */
+  disableClosingConfirmation(): void;
   onEvent(event: string, cb: (...args: unknown[]) => void): void;
   offEvent(event: string, cb: (...args: unknown[]) => void): void;
   BackButton: TelegramBackButton;

@@ -25,8 +25,6 @@ export const colors = {
   inkDisabled: '#B4B1AA',
 } as const;
 
-export type ColorToken = keyof typeof colors;
-
 /** Радиусы — единый ритм форм. */
 export const radius = {
   chip: 8,
@@ -37,11 +35,8 @@ export const radius = {
   pill: 999,
 } as const;
 
-/** Шаг отступов — 4. */
-export const space = (n: number) => n * 4;
-
 export const font = {
-  serif: "'Literata', Georgia, 'Times New Roman', serif",
+  serif: "'Literata Variable', Georgia, 'Times New Roman', serif",
   sans: "'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 } as const;
 
