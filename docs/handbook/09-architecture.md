@@ -77,6 +77,7 @@ english-words/
 │   └── storage-entry.ts   точка входа esbuild для check-storage
 ├── src/                   приложение, см. 07
 ├── AUDIT.md               аудит 2026-11-10 и статус исправлений
+├── CLAUDE.md              правило обновлять справочник в том же PR
 ├── README.md              запуск, деплой, BotFather, устройство
 ├── eslint.config.js
 ├── index.html             точка входа Vite; подключает SDK Telegram

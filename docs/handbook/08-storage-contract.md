@@ -5,7 +5,7 @@
 
 ## Транспорт
 
-| | В Telegram | В браузере (фолбэк) |
+| Аспект | В Telegram | В браузере (фолбэк) |
 |---|---|---|
 | Хранилище | `Telegram.WebApp.CloudStorage` | `window.localStorage` |
 | Имя ключа | как есть: `stats` | с префиксом: `ew:stats` |
