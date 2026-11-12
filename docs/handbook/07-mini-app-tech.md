@@ -250,3 +250,149 @@ sequenceDiagram
 - `tsconfig.json`: `strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`, `target: ES2020`, `moduleResolution: bundler`, `noEmit`.
 - ESLint 9 ([`eslint.config.js`](../../eslint.config.js)): `@eslint/js` recommended + `typescript-eslint` recommended + `react-hooks` recommended; правило `no-unused-vars` разрешает имена с `_` (приём «выбросить поле деструктуризацией»).
 - React `StrictMode`: в dev-режиме эффекты выполняются дважды. Это учтено (эффекты возвращают очистку).
+
+## Указатель функций по модулям
+
+Все функции и типы модулей, включая внутренние (не экспортируемые). Для экранов и компонентов — см. таблицу [компонентов](#компоненты).
+
+### `src/App.tsx`
+
+| Имя | Что делает |
+|---|---|
+| `RETRY_MS` | 20 000 мс до повтора неудачной синхронизации |
+| `ScreenName` | Тип экрана |
+| `sync()` | `flush()` очереди, `absorb` результата в `progress`, `syncFailed`, таймер повтора |
+| `loadAll()` | Параллельная загрузка `settings`, `progress`, `stats`, своих слов; наложение неотправленной очереди; `load` |
+| `patchSettings(patch)` | Обновить настройки в памяти, `enqueue({settings})`, `sync()` |
+| `startLesson()` | `pickLessonWords` → `createLesson` → экран `lesson` |
+| `startRepeat()` | Урок из `repeatWords` (`lessonMistakes`) |
+| `finishLesson(state)` | Лейтнер по словам, `recordLesson`, `enqueue({levels, stats})`, `sync()`, экран `result` |
+| `handleAnswer(correct)` | `answerCard`; если урок кончился — `finishLesson` |
+| `addCustomWord(draft)` | `draftToWord` → `saveCustomWord`; возвращает текст ошибки или `null` |
+| `removeCustomWord(word)` | Подтверждение → `deleteCustomWord` → убрать из `custom` и `progress` → `enqueue({removed})` |
+| `renderScreen()` | Выбор компонента по `screen` |
+| `Frame` | Плашка + экран |
+
+### `src/telegram/webapp.ts`
+
+| Имя | Экспорт | Что делает |
+|---|---|---|
+| `sdk`, `raw` | нет | `window.Telegram.WebApp`; `raw` — только если `platform !== 'unknown'` |
+| `isTelegram` | нет | Признак настоящего Telegram |
+| `isSdkMissing` | да | Telegram открыл, а SDK нет |
+| `safe(fn)` | нет | Вызов в `try/catch` |
+| `since(version)` | нет | `isVersionAtLeast` с защитой |
+| `MIN_VERSION`, `isOutdatedClient`, `clientVersion` | да | `'6.9'`, клиент старше, строка версии для экрана «Обновите Telegram» |
+| `initWebApp()` | да | Старт SDK, цвета, свайпы, высота, подписка `viewportChanged` |
+| `applyHeight()` | нет | `--app-height` из `viewportStableHeight` или `innerHeight` |
+| `setBackButton(handler)` | да | Показать BackButton с обработчиком или скрыть; возвращает очистку (`offClick` + `hide`); в браузере — Escape |
+| `haptic` | да | `success`, `error`, `select`, `tap` |
+| `confirmAction(message)` | да | `showConfirm` или `window.confirm` → `Promise<boolean>` |
+| `setClosingConfirmation(on)` | да | Включить/выключить подтверждение закрытия |
+| `LS_PREFIX`, `MAX_KEY`, `MAX_VALUE`, `KEY_RE`, `TIMEOUT_MS`, `ATTEMPTS` | частично | Лимиты и настройки хранилища |
+| `StorageError` | да | Класс ошибки хранилища |
+| `sleep(ms)` | нет | Пауза |
+| `cloudCall(fn)` | нет | Колбэк CloudStorage → промис с таймаутом 8 с |
+| `withRetry(op)` | нет | До 3 попыток, паузы 300/600 мс |
+| `local(fn)` | нет | Обёртка `localStorage` → `StorageError` |
+| `assertWritable(key, value)` | нет | Проверка ключа и длины до записи |
+| `storage` | да | `get`, `getMany`, `set`, `remove`, `keys` |
+| `checkHomeScreen()` | да | `checkHomeScreenStatus` (8.0+), через 1,5 с без ответа — `'unknown'` |
+| `addToHomeScreen()` | да | Системный диалог (8.0+) |
+| `onHomeScreenAdded(cb)` | да | `onEvent('homeScreenAdded')`; возвращает отписку через `offEvent` |
+
+### `src/lib/sync.ts`
+
+| Имя | Экспорт | Что делает |
+|---|---|---|
+| `PendingLevel`, `Pending` | нет | Типы очереди |
+| `PENDING_KEY` | нет | `'ew-sync:pending'` |
+| `readPending()` | нет | Прочитать очередь из `localStorage` при загрузке модуля |
+| `maxSeq(p)` | нет | Продолжить нумерацию `seq` после перезапуска |
+| `writePending()` | нет | Сохранить очередь в `localStorage` или удалить ключ, если пусто |
+| `isEmpty()` / `hasPending()` | нет / да | Пуста ли очередь |
+| `pendingSnapshot()` | да | Неотправленное для наложения на облако при запуске |
+| `enqueue(change)` | да | Положить изменения в очередь |
+| `FlushResult` | да | `{ ok, merged }` |
+| `flush()` | да | Отправка, вызовы цепочкой |
+| `doFlush()` | нет | Сама отправка: уровни → stats → settings |
+| `absorb(current, merged, removed)` | да | Влить слитую версию облака в память |
+| `__resetForTests()` | да | Только для `check:storage` |
+
+### `src/lib/progress.ts`
+
+| Имя | Экспорт | Что делает |
+|---|---|---|
+| `MAX_VALUE`, `PREFIX` | нет | 4096, `'progress_'` |
+| `baseKey(level)`, `shardKey(level, i)` | нет | `progress_b1`, `progress_b1_<i>` |
+| `levelOfKey(key)` | нет | Уровень по имени ключа или `null` |
+| `parseLevelProgress(raw)` | да | Строка → `LevelProgress`, битые записи выбрасываются |
+| `isNumeric`, `clampBox` | нет | Помощники разбора |
+| `serializeLevelProgress(p)` | да | `LevelProgress` → массив строк ≤ 4096 |
+| `shardIndex(level, key)` | нет | Номер шарда по ключу |
+| `collect(keys, values)` | нет | Значения ключей → `Progress` |
+| `loadProgress()` | да | Прочитать весь прогресс |
+| `mergeLevelProgress(other, preferred, removed)` | да | Слияние по `lastDay` |
+| `saveLevelProgress(level, local, removed)` | да | Перечитать, слить, записать шарды, удалить лишние |
+
+### `src/lib/lesson.ts`
+
+| Имя | Экспорт | Что делает |
+|---|---|---|
+| `LessonCard`, `LessonState` | да | Типы урока |
+| `shuffle(items)` | нет | Фишер–Йетс |
+| `poolFor(words, set, level)` | да | Пул урока |
+| `REVIEW_FLIP` | нет | 30 |
+| `pickLessonWords(pool, progress, size, day)` | да | Подбор слов урока |
+| `norm(s)`, `optionText(word)` | нет | Нормализация текста; `ru[0]` |
+| `buildCard(word, pool, all)` | да | Четыре варианта |
+| `createLesson(words, pool, all)` | да | Новый урок |
+| `currentCard(state)` | да | Текущая карточка |
+| `answerCard(state, correct)` | да | Ответ, возврат ошибки в очередь |
+| `isLessonOver(state)` | да | Конец урока |
+| `lessonMistakes(state)` | да | Слова с ошибками |
+
+### `src/lib/leitner.ts`, `stats.ts`, `settings.ts`
+
+| Имя | Модуль | Что делает |
+|---|---|---|
+| `INTERVALS`, `MAX_BOX`, `DAY_EPOCH`, `DAY_MS` | leitner | Константы |
+| `dayOf(ms, offset)`, `today()` | leitner | Номер дня |
+| `WordProgress`, `LevelProgress`, `Progress` | leitner | Типы прогресса |
+| `isDue`, `overdueBy`, `applyAnswer` | leitner | Лейтнер |
+| `boxTone(box)` | leitner | Не используется (H-04) |
+| `LessonRecord`, `Stats`, `EMPTY_STATS`, `HISTORY_LIMIT` | stats | Типы и начальное значение |
+| `loadStats()`, `saveStats(stats)` | stats | Чтение и запись ключа `stats` |
+| `LessonOutcome` | stats | `{ size, firstTry, answers, wrongAnswers }` — итог урока для `recordLesson` |
+| `recordLesson(stats, outcome, day)` | stats | Счётчики, серия, история |
+| `currentStreak(stats, day)` | stats | Серия с учётом пропуска |
+| `Summary`, `summarize(pool, progress, stats, day)` | stats | Сводка для главной: `known`, `learning`, `due`, `fresh`, `streak` |
+| `Settings`, `DEFAULT_SETTINGS` | settings | Тип и значения по умолчанию |
+| `loadSettings()`, `saveSettings(s)` | settings | Чтение и запись ключа `settings` |
+
+### `src/lib/customWords.ts`, `speech.ts`
+
+| Имя | Модуль | Что делает |
+|---|---|---|
+| `CUSTOM_SET` | customWords | `'custom'` — набор-метка своих слов |
+| `isCustom(word)` | customWords | `sets` содержит `custom` |
+| `LIMITS`, `MAX_ID` | customWords | `{ en: 60, ru: 120, example: 200 }`, 64 |
+| `CustomDraft` | customWords | Поля формы: `en`, `ru`, `exampleEn`, `exampleRu`, `pos`, `level` |
+| `slugify(en)` | customWords | `id` из слова |
+| `draftToWord(draft, taken)` | customWords | Форма → `Word` или `null` |
+| `loadCustomWords()` | customWords | Все `cw_*`, отсортированы по `en` |
+| `parseCustomWord(raw)` | customWords | Валидация записи |
+| `saveCustomWord(word)` | customWords | `set('cw_<id>')` |
+| `deleteCustomWord(id)` | customWords | `remove('cw_<id>')` |
+| `synth`, `canSpeak` | speech | `speechSynthesis` и признак его наличия |
+| `pickVoice()` | speech | Выбор голоса `en-US` → `en-*` |
+| `speak(text)` | speech | Произнести |
+
+### Прочее
+
+| Имя | Где | Что делает |
+|---|---|---|
+| `applyCssVariables(root)` | `theme/colors.ts` | Токены → CSS-переменные `--c-*`, `--r-*`, `--font-*` |
+| `wordSize(en)` | `screens/LessonScreen.tsx` | Размер шрифта слова: 46/38/32/27 |
+| `plural(...)` | `ResultScreen.tsx`, `WordsScreen.tsx` | Склонение «день/дня/дней», «слово/слова/слов» |
+| `highlight(sentence, en)` | `components/WordCard.tsx` | Выделение слова в примере |

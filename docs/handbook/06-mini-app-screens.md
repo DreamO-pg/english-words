@@ -8,26 +8,37 @@
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Проверки: main.tsx, initWebApp()
-    Проверки --> UpdateSdk: isSdkMissing
-    Проверки --> UpdateOutdated: isOutdatedClient (< 6.9)
-    Проверки --> Load: иначе
-    UpdateSdk --> [*]: «Повторить» = reload
+    state "Проверки при старте" as Boot
+    state "UpdateScreen: SDK не загрузился" as UpdSdk
+    state "UpdateScreen: обновите Telegram" as UpdOld
+    state "LoadScreen: загрузка" as Load
+    state "LoadScreen: ошибка" as LoadFailed
+    state "home: главная" as Home
+    state "lesson: урок" as Lesson
+    state "result: итог" as Result
+    state "words: Мои слова" as Words
+    state "addWord: своё слово" as AddWord
+    [*] --> Boot
+    Boot --> UpdSdk: isSdkMissing
+    Boot --> UpdOld: версия ниже 6.9
+    Boot --> Load: иначе
+    UpdSdk --> [*]: Повторить = перезагрузка
     Load --> LoadFailed: StorageError
-    LoadFailed --> Load: «Повторить»
-    Load --> home: данные прочитаны
-    home --> lesson: «Учить»
-    home --> words: «Мои слова»
-    lesson --> lesson: «Дальше»
-    lesson --> result: последнее слово закрыто
-    lesson --> home: «назад» (с подтверждением, если был ответ)
-    result --> lesson: «Повторить ошибки» / «Ещё урок»
-    result --> home: «назад»
-    words --> addWord: «Добавить слово»
-    words --> home: «назад»
-    addWord --> words: «Сохранить» (успех) / «Отмена» / «назад»
-    note right of Load: ErrorBoundary перехватывает исключение\nрендера на любом экране → «Что-то сломалось»
+    LoadFailed --> Load: Повторить
+    Load --> Home: данные прочитаны
+    Home --> Lesson: Учить
+    Home --> Words: Мои слова
+    Lesson --> Lesson: Дальше
+    Lesson --> Result: последнее слово закрыто
+    Lesson --> Home: назад (с подтверждением после ответа)
+    Result --> Lesson: Повторить ошибки / Ещё урок
+    Result --> Home: назад
+    Words --> AddWord: Добавить слово
+    Words --> Home: назад
+    AddWord --> Words: Сохранить / Отмена / назад
 ```
+
+На любом экране исключение при рендере перехватывает `ErrorBoundary` и показывает «Что-то сломалось».
 
 | `screen` | Компонент | Как попасть | «Назад» (BackButton) |
 |---|---|---|---|
