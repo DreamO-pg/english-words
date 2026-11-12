@@ -75,7 +75,7 @@ Mini App в Telegram открывается только по **HTTPS**. Вар�
 | `npm run check:storage` | Сбои чтения, лимиты CloudStorage, слияние, запись поверх другого устройства, шарды, очередь при сбое и после перезапуска, свои слова, мок `Telegram.WebApp.CloudStorage` | 37 | 1 |
 | `npm run lint` | ESLint | — | ≠ 0 |
 | `npm run check` | Всё выше по очереди | — | первый провал |
-| `npm run build` | `tsc --noEmit` + сборка | — | ≠ 0 |
+| `npm run build` | `tsc --noEmit` и сборка | — | ≠ 0 |
 
 Перед PR: `npm run check && npm run build`. После правки словаря **читать вывод `check:words` глазами**: CI ошибки словаря не остановят.
 

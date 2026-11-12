@@ -65,7 +65,7 @@
 | R-04 | Эксплуатация | Н | CI на Node 20, проверки в CI не запускались, `esbuild` не объявлен | Исправлено (`cf520e8`, `e8c3b78`) | Node 22, `npm run check` в деплое и на PR, `esbuild` в devDependencies |
 | R-05 | Зависимости | Н | `npm audit`: 3 уязвимости в dev-зависимостях | Частично (`cf520e8`) | `source-map-js` закрыт; vite/esbuild (CORS dev-сервера, GHSA-67mh-4wv8-2f99) требуют vite 5 → 8, отложено |
 | T-01 | Telegram | Н (осознанно) | Только светлая тема, нет `color-scheme` и `setBottomBarColor` | Частично (`c7096ed`) | `color-scheme: light`, `setBottomBarColor`; тёмной темы нет по решению |
-| T-02 | Telegram / UX | Н | «Назад» из урока терял урок без вопроса | Исправлено (`c7096ed`) | `showConfirm` + `enableClosingConfirmation` на время урока |
+| T-02 | Telegram / UX | Н | «Назад» из урока терял урок без вопроса | Исправлено (`c7096ed`) | `showConfirm` и `enableClosingConfirmation` на время урока |
 | T-03 | Telegram | Н | Версия клиента не проверялась | Исправлено (`c7096ed`) | `isVersionAtLeast` у каждого вызова, экран «Обновите Telegram» ниже 6.9 |
 | T-04 | Telegram | Н, требует проверки | Ограничение Bot API 10.2 и редирект 301 без слэша | Задокументировано (`c7096ed`) | README требует URL со слэшем; на живом клиенте не проверено |
 | T-05 | Telegram / UX | Н | Плашка скрывалась по нажатию, даже если диалог отменён | Исправлено (`c7096ed`) | Скрывает событие `homeScreenAdded` |

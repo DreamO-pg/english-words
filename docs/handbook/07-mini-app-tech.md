@@ -239,7 +239,7 @@ sequenceDiagram
 | из них словарь `src/data/*` (оценка: минифицированный `words.ts` отдельно) | ≈ 151 КБ | ≈ 43 КБ |
 | `assets/index-*.css` (в основном `@font-face`) | 9,46 КБ | 1,59 КБ |
 | Шрифты (39 файлов woff/woff2, все поднаборы) | ≈ 720 КБ всего | — |
-| `dist/` целиком (41 файл в `assets` + `index.html`) | ≈ 1,0 МБ | — |
+| `dist/` целиком (41 файл в `assets` и `index.html`) | ≈ 1,0 МБ | — |
 
 Браузер качает только нужные поднаборы шрифтов по `unicode-range`: на главной латиницу и кириллицу (Literata ≈ 110 + 62 КБ, Golos ≈ 12 КБ на начертание), в уроке ещё latin-ext для МФА. Словарь в бандле — осознанное решение (AUDIT.md: «словарь остаётся в бандле, это осознанно»).
 
@@ -285,7 +285,7 @@ sequenceDiagram
 | `MIN_VERSION`, `isOutdatedClient`, `clientVersion` | да | `'6.9'`, клиент старше, строка версии для экрана «Обновите Telegram» |
 | `initWebApp()` | да | Старт SDK, цвета, свайпы, высота, подписка `viewportChanged` |
 | `applyHeight()` | нет | `--app-height` из `viewportStableHeight` или `innerHeight` |
-| `setBackButton(handler)` | да | Показать BackButton с обработчиком или скрыть; возвращает очистку (`offClick` + `hide`); в браузере — Escape |
+| `setBackButton(handler)` | да | Показать BackButton с обработчиком или скрыть; возвращает очистку (`offClick` и `hide`); в браузере — Escape |
 | `haptic` | да | `success`, `error`, `select`, `tap` |
 | `confirmAction(message)` | да | `showConfirm` или `window.confirm` → `Promise<boolean>` |
 | `setClosingConfirmation(on)` | да | Включить/выключить подтверждение закрытия |
