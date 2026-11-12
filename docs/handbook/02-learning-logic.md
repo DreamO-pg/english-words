@@ -341,8 +341,8 @@ currentStreak: (lastDay == day или day − lastDay == 1) ? streak : 0
 | Поле | Как считается | Где показывается |
 |---|---|---|
 | `lessons` | +1 за каждый законченный урок | Нигде |
-| `answers` | + все показы урока (`queue.length`) | Нигде |
-| `correct` | + `answers − wrongAnswers` | Нигде. Точность `correct / answers` нигде не выводится |
+| `answers` | прибавляются все показы урока (`queue.length`) | Нигде |
+| `correct` | прибавляется `answers − wrongAnswers` урока | Нигде. Точность `correct / answers` нигде не выводится |
 | `streak` | См. выше | Через `currentStreak`: главная «дней подряд», итог «N дней подряд» |
 | `bestStreak` | max серии | Нигде |
 | `lastDay` | день последнего урока | Используется для серии |
